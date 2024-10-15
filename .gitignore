@@ -36,3 +36,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 output.*
+Software/*
+!Software/.gitkeep
+ansible_venv
+!config/.gitkeep
