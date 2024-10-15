@@ -1,0 +1,4 @@
+# Default values for orbstack hosts
+orbstack:
+  image: "almalinux:9"
+  ansible_user: "root"

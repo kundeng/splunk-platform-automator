@@ -47,6 +47,10 @@ DOCUMENTATION = r'''
             description: virtualbox settings
             type: dictionary
             required: false
+        orbstack:
+            description: orbstack settings
+            type: dictionary
+            required: false
         splunk_defaults:
             description: splunk_defaults settings
             type: dictionary
@@ -156,7 +160,7 @@ class InventoryModule(BaseInventoryPlugin):
         setattr(self, 'virtualization', None)
         with open(splunk_config,"r") as file:
             splunk_config = yaml.load(file, Loader=yaml.FullLoader)
-        supported_virtualizations = ['virtualbox','aws']
+        supported_virtualizations = ['virtualbox','aws','orbstack']
         for virtualization in supported_virtualizations:
             if virtualization in splunk_config:
                 setattr(self, 'virtualization', virtualization)
@@ -298,7 +302,7 @@ class InventoryModule(BaseInventoryPlugin):
         
         # Defining allowed settings
         allowed_roles = ['cluster_manager','deployer','deployment_server','heavy_forwarder','indexer','license_manager','monitoring_console','search_head','universal_forwarder','universal_forwarder_windows']
-        allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','ip_addr','custom']
+        allowed_hostvars = ['splunk_version','splunk_admin_password','splunk_license_file','splunk_outputs','splunk_search_peers','splunk_conf','os','aws','virtualbox','ip_addr','custom','orbstack']
         allowed_roles_with_site = ['indexer','search_head','cluster_manager']
 
         # Creating some data structure for collecting information later on
@@ -591,3 +595,31 @@ class InventoryModule(BaseInventoryPlugin):
         self._populate_defaults()
         # Call our internal helper to populate the dynamic inventory from the config file
         self._populate()
+        if self.virtualization == 'orbstack':
+            self._process_orbstack_configs()
+
+def _process_orbstack_configs(self):
+    default_config = self.defaults.get('orbstack', {})
+    global_orbstack_config = self.configfiles.get('orbstack', {})
+
+    for hostname in self.inventory.hosts:
+        # Start with default config
+        config = default_config.copy()
+        # Apply global config
+        config.update(global_orbstack_config)
+        # Apply host-specific config
+        host_vars = self.inventory.get_vars(hostname)
+        host_orbstack_config = host_vars.get('orbstack', {})
+        config.update(host_orbstack_config)
+
+        # Set variables based on the merged config
+        image = config.get('image', 'rocky:9')
+        ansible_user = config.get('ansible_user', 'root')
+
+        self.set_variable(hostname, 'ansible_host', f"{hostname}@orb")
+        self.set_variable(hostname, 'ansible_user', ansible_user)
+        self.set_variable(hostname, 'orbstack_image', image)
+
+        # Remove the 'orbstack' key from the host variables
+        if 'orbstack' in host_vars:
+            del host_vars['orbstack']

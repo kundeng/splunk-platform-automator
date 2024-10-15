@@ -38,6 +38,11 @@ virtualbox:
 #    -  source: "../../Documents/Splunk/Software"
 #       target: "/Splunk_Software"
 
+# Orbstack definitions
+orbstack:
+  image: "rocky:9"
+  ansible_user: "root"
+
 # Operating System definitions
 os:
   # Execute remote commands before ansible is called.

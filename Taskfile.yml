@@ -1,0 +1,78 @@
+version: '3'
+
+tasks:
+  venv:
+    desc: Create a virtual environment
+    cmds:
+      - python3 -m venv ansible_venv
+
+  install:
+    desc: Install dependencies in the virtual environment
+    deps: [venv]
+    cmds:
+      - source ansible_venv/bin/activate && pip install -r requirements.txt
+    platforms: [linux, darwin]
+
+  install:windows:
+    desc: Install dependencies in the virtual environment (Windows)
+    deps: [venv]
+    cmds:
+      - ansible_venv\Scripts\activate && pip install -r requirements.txt
+    platforms: [windows]
+
+  run:
+    desc: Run the main script
+    cmds:
+      - source ansible_venv/bin/activate && python main.py
+    platforms: [linux, darwin]
+
+  run:windows:
+    desc: Run the main script (Windows)
+    cmds:
+      - ansible_venv\Scripts\activate && python main.py
+    platforms: [windows]
+
+  test:
+    desc: Run tests
+    cmds:
+      - source ansible_venv/bin/activate && pytest
+    platforms: [linux, darwin]
+
+  test:windows:
+    desc: Run tests (Windows)
+    cmds:
+      - ansible_venv\Scripts\activate && pytest
+    platforms: [windows]
+
+  clean:
+    desc: Remove virtual environment and cached files
+    cmds:
+      - rm -rf ansible_venv
+      - find . -type d -name "__pycache__" -exec rm -rf {} +
+    platforms: [linux, darwin]
+
+  clean:windows:
+    desc: Remove virtual environment and cached files (Windows)
+    cmds:
+      - if exist ansible_venv rmdir /s /q ansible_venv
+      - for /d /r . %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d"
+    platforms: [windows]
+
+  _freeze:
+    desc: Update requirements.txt with current package versions
+    internal: true
+    cmds:
+      - source ansible_venv/bin/activate && pip freeze > requirements.txt
+    platforms: [linux, darwin]
+
+  _freeze:windows:
+    desc: Update requirements.txt with current package versions (Windows)
+    internal: true
+    cmds:
+      - ansible_venv\Scripts\activate && pip freeze > requirements.txt
+    platforms: [windows]
+
+  dev:freeze:
+    desc: Update requirements.txt (development task)
+    cmds:
+      - task: _freeze
