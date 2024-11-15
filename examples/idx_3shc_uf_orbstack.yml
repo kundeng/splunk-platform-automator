@@ -1,0 +1,57 @@
+---
+# splunk_config.yml
+plugin: splunk-platform-automator
+
+orbstack:
+  image: "almalinux:9"
+  ansible_user: "root"
+
+virtualization: orbstack
+
+# Splunk default settings
+splunk_defaults:
+  splunk_version: 'latest'
+  splunk_admin_password: 'splunklab'
+
+# Search Head Cluster settings
+splunk_shclusters:
+  - shc_name: shc1
+    shc_site: site0
+    shc_password: splunkshc
+    shc_replication_port: 9887
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Deployer
+  - name: dpl
+    roles:
+      - deployer
+      - deployment_server
+      - monitoring_console
+    shcluster: shc1
+    orbstack:
+      image: "almalinux:9"
+
+  # Single Indexer
+  - name: idx
+    roles:
+      - indexer
+    orbstack:
+      image: "almalinux:9"
+
+  # Search Heads
+  - iter:
+      prefix: sh
+      numbers: 1..3
+    roles:
+      - search_head
+    shcluster: shc1
+    orbstack:
+      image: "almalinux:9"
+
+   # Universal Forwarder
+  - name: uf
+    roles:
+      - universal_forwarder
+    orbstack:
+      image: "almalinux:9"

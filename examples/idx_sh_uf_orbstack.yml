@@ -1,0 +1,51 @@
+---
+# splunk_config.yml
+plugin: splunk-platform-automator
+
+orbstack:
+  image: almalinux:9
+  ansible_user: root
+
+# Splunk default settings
+splunk_defaults:
+  splunk_env_name: splk
+  splunk_version: latest
+  splunk_admin_password: splunklab
+  time_zone: America/Detroit
+  url_locale: en-GB
+  disable_apparmor: true
+  disable_selinux: true
+  update_hosts_file: true
+  splunk_ssl:
+    enable: false
+  splunk_apps_dir: app_repo
+  splunk_auth_dir: ./auth
+  splunk_baseconfig_dir: ./Software
+  splunk_software_dir: ./Software
+  splunk_save_baseconfig_apps: false
+  splunk_save_baseconfig_apps_dir: apps
+  splunk_save_serverclass: false
+  splunk_outputs: all
+  splunk_search_peers: all
+  splunk_indexes_default_paths: true
+  splunk_indexes:
+    test: null
+    test_metrics:
+      datatype: metric
+
+# Splunk hosts with its settings
+splunk_hosts:
+  # Indexer
+  - name: idx
+    roles:
+      - indexer
+
+  # Search Head
+  - name: sh
+    roles:
+      - search_head
+
+  # Universal Forwarder
+  - name: uf
+    roles:
+      - universal_forwarder
