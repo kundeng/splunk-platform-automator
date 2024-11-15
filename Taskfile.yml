@@ -1,78 +1,101 @@
 version: '3'
 
+vars:
+  TERRAFORM_DIR: terraform
+  ANSIBLE_DIR: ansible
+  CONFIG_DIR: config
+  EXAMPLES_DIR: examples
+  DEFAULT_ENV: dev
+  DEFAULT_PROVIDER: orbstack
+
 tasks:
-  venv:
-    desc: Create a virtual environment
+  init:
+    desc: Initialize development environment
     cmds:
-      - python3 -m venv ansible_venv
+      - python3 -m venv .venv
+      - source .venv/bin/activate && pip install -r requirements.txt
+      - terraform -chdir={{.TERRAFORM_DIR}}/environments/{{.DEFAULT_ENV}} init
 
-  install:
-    desc: Install dependencies in the virtual environment
-    deps: [venv]
+  validate:config:
+    desc: Validate splunk_config.yml file
     cmds:
-      - source ansible_venv/bin/activate && pip install -r requirements.txt
-    platforms: [linux, darwin]
+      - source .venv/bin/activate && python -m ansible.plugins.inventory.splunk-platform-automator --validate {{.CLI_ARGS | default "config/splunk_config.yml"}}
 
-  install:windows:
-    desc: Install dependencies in the virtual environment (Windows)
-    deps: [venv]
+  generate:inventory:
+    desc: Generate Ansible inventory from configuration
     cmds:
-      - ansible_venv\Scripts\activate && pip install -r requirements.txt
-    platforms: [windows]
+      - source .venv/bin/activate && python -m ansible.plugins.inventory.splunk-platform-automator --list {{.CLI_ARGS | default "config/splunk_config.yml"}}
 
-  run:
-    desc: Run the main script
+  plan:
+    desc: Plan infrastructure changes
+    deps: [validate:config]
+    dir: '{{.TERRAFORM_DIR}}/environments/{{.CLI_ARGS | default .DEFAULT_ENV}}'
     cmds:
-      - source ansible_venv/bin/activate && python main.py
-    platforms: [linux, darwin]
+      - terraform plan -out=tfplan
 
-  run:windows:
-    desc: Run the main script (Windows)
+  apply:
+    desc: Apply infrastructure changes
+    deps: [validate:config]
+    dir: '{{.TERRAFORM_DIR}}/environments/{{.CLI_ARGS | default .DEFAULT_ENV}}'
     cmds:
-      - ansible_venv\Scripts\activate && python main.py
-    platforms: [windows]
+      - terraform apply tfplan
+
+  destroy:
+    desc: Destroy infrastructure
+    dir: '{{.TERRAFORM_DIR}}/environments/{{.CLI_ARGS | default .DEFAULT_ENV}}'
+    cmds:
+      - terraform destroy
+
+  ansible:ping:
+    desc: Test Ansible connectivity to all hosts
+    deps: [generate:inventory]
+    cmds:
+      - source .venv/bin/activate && ansible all -m ping -i inventory_output.yml
+
+  ansible:deploy:
+    desc: Deploy Splunk configuration using Ansible
+    deps: [generate:inventory]
+    cmds:
+      - source .venv/bin/activate && ansible-playbook -i inventory_output.yml playbooks/deploy.yml
 
   test:
     desc: Run tests
     cmds:
-      - source ansible_venv/bin/activate && pytest
-    platforms: [linux, darwin]
+      - source .venv/bin/activate && python -m pytest tests/
 
-  test:windows:
-    desc: Run tests (Windows)
+  lint:
+    desc: Run linters
     cmds:
-      - ansible_venv\Scripts\activate && pytest
-    platforms: [windows]
+      - source .venv/bin/activate && flake8 ansible/
+      - source .venv/bin/activate && pylint ansible/
+      - terraform fmt -check -recursive {{.TERRAFORM_DIR}}
+
+  format:
+    desc: Format code
+    cmds:
+      - source .venv/bin/activate && black ansible/
+      - terraform fmt -recursive {{.TERRAFORM_DIR}}
+
+  example:deploy:
+    desc: Deploy an example configuration
+    cmds:
+      - task: validate:config
+        vars: {CLI_ARGS: "{{.EXAMPLES_DIR}}/{{.CLI_ARGS}}"}
+      - task: generate:inventory
+        vars: {CLI_ARGS: "{{.EXAMPLES_DIR}}/{{.CLI_ARGS}}"}
+      - task: plan
+      - task: apply
+      - task: ansible:deploy
 
   clean:
-    desc: Remove virtual environment and cached files
+    desc: Clean up generated files
     cmds:
-      - rm -rf ansible_venv
-      - find . -type d -name "__pycache__" -exec rm -rf {} +
-    platforms: [linux, darwin]
+      - rm -f inventory_output.yml
+      - rm -rf .terraform
+      - rm -f terraform.tfstate*
+      - rm -f tfplan
 
-  clean:windows:
-    desc: Remove virtual environment and cached files (Windows)
+  default:
+    desc: Show available tasks
     cmds:
-      - if exist ansible_venv rmdir /s /q ansible_venv
-      - for /d /r . %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d"
-    platforms: [windows]
-
-  _freeze:
-    desc: Update requirements.txt with current package versions
-    internal: true
-    cmds:
-      - source ansible_venv/bin/activate && pip freeze > requirements.txt
-    platforms: [linux, darwin]
-
-  _freeze:windows:
-    desc: Update requirements.txt with current package versions (Windows)
-    internal: true
-    cmds:
-      - ansible_venv\Scripts\activate && pip freeze > requirements.txt
-    platforms: [windows]
-
-  dev:freeze:
-    desc: Update requirements.txt (development task)
-    cmds:
-      - task: _freeze
+      - task --list

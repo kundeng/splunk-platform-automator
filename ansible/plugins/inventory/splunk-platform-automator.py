@@ -598,28 +598,40 @@ class InventoryModule(BaseInventoryPlugin):
         if self.virtualization == 'orbstack':
             self._process_orbstack_configs()
 
-def _process_orbstack_configs(self):
-    default_config = self.defaults.get('orbstack', {})
-    global_orbstack_config = self.configfiles.get('orbstack', {})
+    def _process_orbstack_configs(self):
+        """
+        Process OrbStack-specific host variables and set Ansible-specific
+        variables based on the values in the config file.
 
-    for hostname in self.inventory.hosts:
-        # Start with default config
-        config = default_config.copy()
-        # Apply global config
-        config.update(global_orbstack_config)
-        # Apply host-specific config
-        host_vars = self.inventory.get_vars(hostname)
-        host_orbstack_config = host_vars.get('orbstack', {})
-        config.update(host_orbstack_config)
+        The OrbStack config is read from the 'orbstack' key in the config file,
+        and the values are merged with the host-specific 'orbstack' values. The
+        merged config is then used to set the Ansible-specific variables.
 
-        # Set variables based on the merged config
-        image = config.get('image', 'rocky:9')
-        ansible_user = config.get('ansible_user', 'root')
+        The OrbStack config is removed from the host variables after it has been
+        processed.
+        """
+        default_config = self.defaults.get('orbstack', {})
+        global_orbstack_config = self.configfiles.get('orbstack', {})
 
-        self.set_variable(hostname, 'ansible_host', f"{hostname}@orb")
-        self.set_variable(hostname, 'ansible_user', ansible_user)
-        self.set_variable(hostname, 'orbstack_image', image)
+        for hostname in self.inventory.hosts:
+            # Start with default config
+            config = default_config.copy()
+            # Apply global config
+            config.update(global_orbstack_config)
+            # Apply host-specific config
+            host_vars = self.inventory.get_host(hostname).vars
+            host_orbstack_config = host_vars.get('orbstack', {})
+            config.update(host_orbstack_config)
 
-        # Remove the 'orbstack' key from the host variables
-        if 'orbstack' in host_vars:
-            del host_vars['orbstack']
+            # Set variables based on the merged config
+            image = config.get('image', 'rocky:9')
+            ansible_user = config.get('ansible_user', 'root')
+
+            # Set the OrbStack-specific variables
+            self.inventory.set_variable(hostname, 'ansible_host', f"{hostname}@orb")
+            self.inventory.set_variable(hostname, 'ansible_user', ansible_user)
+            self.inventory.set_variable(hostname, 'orbstack_image', image)
+
+            # Remove the 'orbstack' key from host variables since we've processed it
+            if 'orbstack' in host_vars:
+                del host_vars['orbstack']

@@ -2,43 +2,117 @@
 
 ## Overview
 
-This project aims to migrate the existing Splunk deployment automation solution from Vagrant to Terraform. It will maintain the current Ansible-based configuration management while replacing Vagrant with Terraform for infrastructure provisioning.
+This project provides infrastructure automation for Splunk deployments using Terraform and Ansible. It uses OrbStack as the primary virtualization provider, offering a modern, efficient alternative to traditional virtualization on ARM-based macOS systems.
 
-## Goals
+## Features
 
-1. Replace Vagrant with Terraform for all infrastructure provisioning.
-2. Support multiple providers (OrbStack, VirtualBox, AWS, LXC) through Terraform.
-3. Preserve and extend the current Ansible dynamic inventory system.
-4. Maintain and enhance the current `splunk_config.yml` file format.
+- Infrastructure provisioning with Terraform
+- OrbStack-based virtualization (optimized for ARM macOS)
+- Ansible-based configuration management
+- Dynamic inventory generation
+- Unified configuration through `splunk_config.yml`
+- Future support planned for AWS
 
-## Approach
+## Prerequisites
 
-1. Use Terraform as the primary tool for infrastructure provisioning across all supported providers.
-2. Adapt the existing Ansible dynamic inventory to work with Terraform-provisioned resources.
-3. Extend the `splunk_config.yml` format to include provider-specific configurations for Terraform.
-4. Implement provider modules in Terraform, starting with OrbStack and gradually adding others.
+- macOS with Apple Silicon (M1/M2)
+- Python 3.x
+- Terraform
+- Ansible
+- Task (for workflow automation)
+- OrbStack installed and configured
+
+## Quick Start
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/splunk-platform-automator.git
+   cd splunk-platform-automator
+   ```
+
+2. Initialize the environment:
+   ```bash
+   task init
+   ```
+
+3. Copy and customize a configuration:
+   ```bash
+   cp examples/idx_3shc_uf_orbstack.yml config/splunk_config.yml
+   # Edit config/splunk_config.yml for your needs
+   ```
+
+4. Deploy:
+   ```bash
+   task example:deploy -- idx_3shc_uf_orbstack.yml
+   ```
+
+## Configuration
+
+### splunk_config.yml
+
+The `splunk_config.yml` file is the single source of truth for your deployment. It defines:
+
+- OrbStack virtualization settings
+- Splunk instance configurations
+- Clustering setup
+- Network configurations
+- Security settings
+
+Example configurations can be found in the `examples/` directory.
+
+### Provider Settings
+
+#### OrbStack (Current)
+```yaml
+virtualization: orbstack
+orbstack:
+  default_image: almalinux:9
+  ansible_user: root
+```
+
+#### AWS (Future)
+Support for AWS deployment will be added in future releases.
+
+## Development
+
+### Directory Structure
+```
+.
+├── ansible/          # Ansible configuration and playbooks
+├── config/          # Configuration files
+├── examples/        # Example configurations
+├── terraform/       # Terraform modules and environments
+└── tests/           # Test suite
+```
+
+### Workflow
+
+Common tasks are automated using Taskfile:
+
+- `task init` - Initialize development environment
+- `task plan` - Plan infrastructure changes
+- `task apply` - Apply infrastructure changes
+- `task ansible:deploy` - Deploy Splunk configuration
+- `task test` - Run tests
+- `task lint` - Run linters
 
 ## Current Status
 
-- Existing Vagrant and Ansible-based system is functional.
-- Initial Terraform configuration for OrbStack integration has been created.
+- [x] Project structure setup
+- [x] OrbStack provider implementation
+- [x] Basic Splunk deployment automation
+- [x] Dynamic inventory generation
+- [ ] Advanced clustering configurations
+- [ ] AWS provider implementation (future)
 
-## Todo List [P: Pending, D: Done, C: Canceled, F: Deferred for refinement]
+## Contributing
 
-1. [P] Implement OrbStack provisioning in Terraform.
-2. [P] Adapt existing Ansible dynamic inventory to work with Terraform output.
-3. [P] Extend `splunk_config.yml` to include Terraform-specific configurations for all providers.
-4. [P] Ensure Ansible can connect to Terraform-provisioned VMs across all providers.
-5. [P] Implement VirtualBox provider in Terraform.
-6. [P] Implement AWS provider in Terraform.
-7. [P] Implement LXC provider in Terraform.
-8. [P] Test full workflow from `splunk_config.yml` to configured Splunk instances on all providers.
-9. [P] Document new Terraform-based workflow and configuration options.
-10. [P] Create migration guide for users moving from Vagrant to Terraform-based setup.
-11. [P] Remove Vagrant-specific code and configurations.
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
-## Next Steps
+## License
 
-1. Focus on implementing OrbStack provisioning in Terraform.
-2. Adapt the existing Ansible dynamic inventory to work with Terraform-provisioned resources.
-3. Extend `splunk_config.yml` to include Terraform-specific configurations for OrbStack.
+This project is licensed under the Apache 2.0 License - see the LICENSE file for details.

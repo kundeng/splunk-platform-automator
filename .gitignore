@@ -40,3 +40,4 @@ Software/*
 !Software/.gitkeep
 ansible_venv
 !config/.gitkeep
+inventory_output.yml
