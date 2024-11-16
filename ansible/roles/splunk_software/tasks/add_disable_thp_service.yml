@@ -1,5 +1,14 @@
 ---
 
+- name: "Check if /sys is writable"
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_disable_thp
+  command: touch /sys/kernel/mm/transparent_hugepage/enabled
+  register: sys_writable
+  ignore_errors: true
+
 - name: "install disable-thp systemd service"
   tags:
     - splunk
@@ -11,7 +20,9 @@
     owner: root
     group: root
     mode: 0644
-  when: use_systemctl == true
+  when: 
+    - use_systemctl == true
+    - sys_writable.rc == 0
 
 - name: commit changes to systemctl
   tags:
@@ -19,7 +30,9 @@
     - splunk_software
     - splunk_install
   command: systemctl daemon-reload
-  when: use_systemctl == true
+  when: 
+    - use_systemctl == true
+    - sys_writable.rc == 0
 
 - name: enable and start disable-thp service
   tags:
@@ -30,4 +43,15 @@
     name: disable-thp
     state: started
     enabled: yes
-  when: use_systemctl == true
+  when: 
+    - use_systemctl == true
+    - sys_writable.rc == 0
+
+- name: "Skip THP disabling in read-only /sys environment"
+  tags:
+    - splunk
+    - splunk_software
+    - splunk_disable_thp
+  debug:
+    msg: "Skipping THP disabling since /sys is read-only"
+  when: sys_writable.rc != 0

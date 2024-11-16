@@ -41,3 +41,5 @@ Software/*
 .venv
 !config/.gitkeep
 inventory_output.yml
+.vscode
+
