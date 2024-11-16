@@ -1,4 +1,5 @@
 # Default values for orbstack hosts
 orbstack:
-  image: "almalinux:9"
-  ansible_user: "root"
+  image: "alma:9"
+  ansible_user: "ansible"
+  splunk_use_policykit: false

@@ -1,13 +1,21 @@
 ---
 # This playbook disables selinux
 
+- name: check if SELinux tools exist
+  stat:
+    path: /usr/sbin/setenforce
+  register: selinux_tools
+  when: disable_selinux|default(false) == true
+
 - name: check SELinux state
-  shell: which getenforce > /dev/null 2>&1 && getenforce
+  shell: getenforce
   check_mode: no
   changed_when: false
-  failed_when: "selinux_state.rc > 1"
+  failed_when: false
   register: selinux_state
-  when: disable_selinux|default(false) == true
+  when: 
+    - disable_selinux|default(false) == true
+    - selinux_tools.stat.exists|default(false) == true
 
 - name: disable SELinux
   tags:
@@ -18,6 +26,8 @@
   register: need_reboot
   when:
     - disable_selinux|default(false) == true
+    - selinux_tools.stat.exists|default(false) == true
+    - selinux_state.rc == 0
     - selinux_state.stdout|lower == "enforcing"
 
 - name: reboot the server and wait for it to come back up.

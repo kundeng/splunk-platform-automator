@@ -38,6 +38,6 @@ __pycache__/
 output.*
 Software/*
 !Software/.gitkeep
-ansible_venv
+.venv
 !config/.gitkeep
 inventory_output.yml

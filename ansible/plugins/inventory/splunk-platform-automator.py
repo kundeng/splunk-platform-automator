@@ -574,7 +574,7 @@ class InventoryModule(BaseInventoryPlugin):
             for section in ['plugin', 'splunk_hosts']:
                 configfiles[section] = self.get_option(section)
             # Store the optional sections from the YAML file
-            for section in ['general', 'custom', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments', 'splunk_apps', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters', 'virtualbox', 'aws']:
+            for section in ['general', 'custom', 'os', 'splunk_dirs', 'splunk_defaults', 'splunk_environments', 'splunk_apps', 'splunk_systemd', 'splunk_idxclusters', 'splunk_shclusters', 'virtualbox', 'aws', 'orbstack']:
                 configfiles[section] = self.get_option(section)
             setattr(self, 'configfiles', configfiles)
         except Exception as e:
@@ -625,12 +625,16 @@ class InventoryModule(BaseInventoryPlugin):
 
             # Set variables based on the merged config
             image = config.get('image', 'rocky:9')
-            ansible_user = config.get('ansible_user', 'root')
+            ansible_user = config.get('ansible_user', 'ansible')
+            splunk_use_policykit = config.get('splunk_use_policykit', True)
 
-            # Set the OrbStack-specific variables
-            self.inventory.set_variable(hostname, 'ansible_host', f"{hostname}@orb")
+            # Set the OrbStack-specific variables with ansible user in hostname
+            self.inventory.set_variable(hostname, 'ansible_host', f"{ansible_user}@{hostname}@orb")
             self.inventory.set_variable(hostname, 'ansible_user', ansible_user)
+            # Override SSH user option with the correct format for OrbStack
+            self.inventory.set_variable(hostname, 'ansible_ssh_user', f'{ansible_user}@{hostname}')
             self.inventory.set_variable(hostname, 'orbstack_image', image)
+            self.inventory.set_variable(hostname, 'splunk_use_policykit', splunk_use_policykit)
 
             # Remove the 'orbstack' key from host variables since we've processed it
             if 'orbstack' in host_vars:
