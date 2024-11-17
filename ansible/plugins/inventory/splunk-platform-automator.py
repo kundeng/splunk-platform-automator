@@ -630,9 +630,10 @@ class InventoryModule(BaseInventoryPlugin):
 
             # Set the OrbStack-specific variables with ansible user in hostname
             self.inventory.set_variable(hostname, 'ansible_host', f"{ansible_user}@{hostname}@orb")
-            self.inventory.set_variable(hostname, 'ansible_user', ansible_user)
             # Override SSH user option with the correct format for OrbStack
             self.inventory.set_variable(hostname, 'ansible_ssh_user', f'{ansible_user}@{hostname}')
+            # Set ansible_user last to ensure it doesn't get overridden
+            self.inventory.set_variable(hostname, 'ansible_user', ansible_user)
             self.inventory.set_variable(hostname, 'orbstack_image', image)
             self.inventory.set_variable(hostname, 'splunk_use_policykit', splunk_use_policykit)
 

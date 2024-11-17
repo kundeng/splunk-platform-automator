@@ -1,16 +1,24 @@
 ---
 # This playbook install a basic user with the login keys
 
+- name: Get ansible user home directory
+  shell: "getent passwd {{ ansible_user }} | cut -d: -f6"
+  register: ansible_user_home
+  changed_when: false
+  check_mode: no
+
 - name: Adding splunk aliases
   tags:
     - common
     - bashrc
   copy:
     src: home/ansible_user/bashrc.splunk
-    dest: "~{{ ansible_user }}/.bashrc.splunk"
+    dest: "{{ ansible_user_home.stdout }}/.bashrc.splunk"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: 0644
   become: true
-  become_user: "{{ ansible_user }}"
+  become_user: root
 
 - name: insert/update bashrc for splunk stuff
   tags:
@@ -18,10 +26,13 @@
     - bashrc
   blockinfile:
     create: yes
-    path: "~{{ ansible_user }}/.bashrc"
+    path: "{{ ansible_user_home.stdout }}/.bashrc"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: 0644
     marker: "#<!-- {mark} ANSIBLE MANAGED BLOCK -->"
     insertafter: "export PATH"
     content: |
-      if [ -f ~/.bashrc.splunk ]; then
-        . ~/.bashrc.splunk
+      if [ -f {{ ansible_user_home.stdout }}/.bashrc.splunk ]; then
+        . {{ ansible_user_home.stdout }}/.bashrc.splunk
       fi

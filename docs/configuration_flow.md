@@ -1,309 +1,160 @@
 # Splunk Platform Automator Configuration Flow
 
-This document details how configurations are processed and applied in the Splunk Platform Automator, using concrete examples.
+This document provides a detailed explanation of how configurations flow through the system using real examples from our deployment. The flow described here specifically follows the execution path for the host `dpl@orb`, which serves as our deployment server. While the overall playbook handles multiple roles and hosts, this documentation focuses on the deployment server's configuration process, as it is responsible for distributing configurations to other Splunk components.
 
-## Overview
+## 1. Host Context
 
-The configuration process follows this high-level flow:
-1. Entry point through `deploy_site.yml`
-2. Role setup through `setup_splunk_roles.yml`
-3. Configuration application through `setup_splunk_conf.yml`
-
-## Detailed Flow
-
-### 1. Deployment Server Role (deployment_server/tasks/main.yml)
-
-The deployment server role has two main responsibilities:
-
-1. **Local Instance Configuration**:
-   ```yaml
-   - name: apply baseconfig app org_all_forwarder_outputs
-     include_role:
-       name: baseconfig_app
-     vars:
-       app_name: 'org_all_forwarder_outputs'
-       app_path: '{{splunk_home}}/etc/apps'
-   ```
-   This installs and configures apps for the deployment server itself.
-
-2. **Deployment Apps Configuration**:
-   ```yaml
-   - name: apply baseconfig app org_all_forwarder_outputs
-     include_role:
-       name: baseconfig_app
-     vars:
-       app_name: 'org_all_forwarder_outputs'
-       app_path: '{{ splunk_home }}/etc/deployment-apps'
-       # Dynamic configuration from inventory
-       splunk_output_list: "{{ hostvars[groups['output_'+splunk_env_name+'_'+output_name][0]]['splunk_output_list'] }}"
-   ```
-   This prepares apps to be deployed to other Splunk instances.
-
-### 2. Configuration Modification Process
-
-Taking org_all_forwarder_outputs as an example:
-
-1. **Initial Template** (org_all_forwarder_outputs/local/outputs.conf):
-   ```ini
-   [tcpout]
-   defaultGroup = primary_indexers 
-
-   [tcpout:primary_indexers]
-   server = server_one:9997, server_two:9997
-   ```
-
-2. **Dynamic Configuration** (baseconfig_app/tasks/org_all_forwarder_outputs.yml):
-   ```yaml
-   # 1. Modify defaultGroup based on environment
-   - name: "setting defaultGroup value"
-     ini_file:
-       section: tcpout
-       option: defaultGroup
-       value: "{{ splunk_outputs_tcpout_list|map('regex_replace','^(.*)$','\\1_indexers')|join(',') }}"
-
-   # 2. Configure indexer discovery
-   - name: "setting indexerDiscovery"
-     ini_file:
-       section: "tcpout:{{ item.idxc_name+'_indexers' }}"
-       option: indexerDiscovery
-       value: "{{ item.idxc_name+'_indexers' }}"
-
-   # 3. Set up SSL if enabled
-   - name: "setting ssl configs"
-     ini_file:
-       section: "tcpout:all_indexers"
-       option: "{{ item.key }}"
-       value: "{{ item.value }}"
-     with_dict: "{{ splunk_ssl.outputs.config }}"
-   ```
-
-Each modification:
-- Updates the configuration file
-- Triggers a Splunk restart if needed
-- Contributes to the final `splunk_conf` structure
-
-### 3. Configuration Tracking
-
-Configurations are tracked in multiple ways:
-
-1. **Through splunk_conf Variable**:
-   ```yaml
-   splunk_conf:
-     outputs.conf:
-       tcpout:
-         defaultGroup: "idx1_indexers,idx2_indexers"
-         indexerDiscovery: "clustered_indexers"
-       "tcpout:idx1_indexers":
-         server: "idx1.splunk.example:9997"
-   ```
-
-2. **Through File Modifications**:
-   - Each `ini_file` task modifies the actual configuration files
-   - Changes are tracked in the app's local/ directory
-   - Modifications trigger Splunk restarts via notify
-
-3. **Through Serverclass Configuration**:
-   ```yaml
-   - name: save serverclass file
-     synchronize:
-       src: "{{ splunk_install_dir }}/splunk/etc/system/local/serverclass.conf"
-       dest: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/"
-   ```
-   This tracks which configurations should be deployed to which clients.
-
-### 4. Configuration Sources and Flow
-
-1. **Default Values**:
-   - Come from base configuration apps in `Software/Configurations - Base/`
-   - Provide template configurations
-
-2. **Dynamic Values**:
-   - From inventory variables (hostvars, group_vars)
-   - From role-specific variables
-   - Example:
-     ```yaml
-     splunk_outputs_tcpout_list: ["idx1", "idx2"]
-     splunk_ssl:
-       outputs:
-         enable: true
-         config:
-           sslVerifyServerCert: true
-     ```
-
-3. **Final Configuration**:
-   - Base templates + Dynamic values
-   - Applied through `splunk_conf` role
-   - Tracked in serverclass.conf for deployment
-
-### 5. Security and Validation
-
-1. **File Permissions**:
-   ```yaml
-   - name: "set secure permissions"
-     ini_file:
-       mode: 0600  # Restrictive permissions for sensitive configs
-       owner: "{{splunk_user}}"
-       group: "{{splunk_group}}"
-   ```
-
-2. **SSL Configuration**:
-   ```yaml
-   - name: "install certs"
-     include_role:
-       name: baseconfig_app
-       tasks_from: splunk_ssl_outputs_certs
-     when: splunk_ssl.outputs.enable == true
-   ```
-
-### 6. Configuration Precedence
-
-1. Base app defaults
-2. Environment-specific values (from inventory)
-3. Role-specific modifications
-4. SSL and security settings
-5. Final `splunk_conf` application
-
-## Key Files and Their Roles
-
-1. **Role Configuration**:
-   - `deployment_server/tasks/main.yml`: Orchestrates app installation and configuration
-   - `baseconfig_app/tasks/org_*.yml`: App-specific configuration logic
-   - `splunk_conf/tasks/add_splunk_conf.yml`: Final configuration application
-
-2. **Templates and Defaults**:
-   - `Software/Configurations - Base/*/local/*.conf`: Base configuration templates
-   - `group_vars/`: Environment-specific defaults
-   - `host_vars/`: Host-specific overrides
-
-3. **Tracking and Deployment**:
-   - `serverclass.conf`: Deployment mappings
-   - Local app directories: Modified configurations
-   - `splunk_conf` variable: Accumulated changes
-
-## Configuration Sources
-
-Base configuration apps structure:
-```
-./Software/Configurations - Base/
-├── org_all_forwarder_outputs/
-│   ├── local/
-│   │   ├── outputs.conf
-│   │   └── app.conf
-│   └── metadata/
-│       └── local.meta
-├── org_all_search_base/
-└── org_ds_secure_server/
-```
-
-## Variable Flow
-
-1. **Initial Variables**:
-   - Set by inventory plugin
-   - Defined in group_vars/host_vars
-   ```yaml
-   # group_vars/all/splunk_conf.yml
-   splunk_conf:
-     outputs.conf:
-       tcpout:
-         defaultGroup: primary_indexers
-   ```
-
-2. **Configuration Variables**:
-   - Built by baseconfig_app role
-   ```yaml
-   # After baseconfig_app processing
-   splunk_conf:
-     outputs.conf:
-       tcpout:
-         defaultGroup: value
-         indexerDiscovery: value
-     web.conf:
-       settings:
-         enableSplunkWebSSL: true
-   ```
-
-3. **Final Application**:
-   - Transformed by splunk_conf role
-   ```yaml
-   # Final splunk_conf_settings_list
-   splunk_conf_settings_list:
-   - section: tcpout
-     key: defaultGroup
-     value: primary_indexers
-   ```
-
-## Deployment Server App Management
-
-1. **App Deployment** (deployment_server/tasks/save_serverclass.yml):
 ```yaml
-- name: save serverclass file
-  synchronize:
-    src: "{{ splunk_install_dir }}/splunk/etc/system/local/serverclass.conf"
-    dest: "../{{splunk_save_baseconfig_apps_dir|default('apps')}}/..."
+# Host-specific details
+ansible_host: dpl@orb
+role: deployment_server
+environment: splk
+
+# Key responsibilities
+- Manages configuration distribution
+- Serves as deployment server for forwarders
+- Handles SSL certificate distribution
+- Processes and validates configurations
 ```
 
-## Key Files and Their Roles
+## 2. Environment Structure
 
-1. **Playbooks**:
-   - `ansible/deploy_site.yml`: Entry point, orchestrates entire deployment
-   - `ansible/setup_splunk_roles.yml`: Sets up each Splunk role
-   - `ansible/setup_splunk_conf.yml`: Applies final configurations
+Our environment consists of:
 
-2. **Roles**:
-   - `ansible/roles/deployment_server/`: Manages app deployment
-   - `ansible/roles/baseconfig_app/`: Handles base app installation
-   - `ansible/roles/splunk_conf/`: Applies final configurations
-
-3. **Configuration Sources**:
-   - `Software/Configurations - Base/`: Contains base apps
-   - `group_vars/`: Group-specific variables
-   - `host_vars/`: Host-specific variables
-
-## Configuration Precedence
-
-1. Default configurations from base apps
-2. Role-specific modifications
-3. Host/group variable overrides
-4. Final splunk_conf application
-
-## Security Considerations
-
-1. File Permissions:
 ```yaml
-- name: set file permissions
-  file:
-    path: "{{ app_path }}/{{ app_dest_name }}"
-    mode: 0644
-    owner: "{{splunk_user}}"
-    group: "{{splunk_group}}"
+# Key Components
+- Deployment Server (dpl)
+- Indexers (idx)
+- Search Heads (sh1, sh2, sh3)
+- Universal Forwarder (uf)
 ```
 
-2. SSL Configuration:
-```ini
-# SSL Settings in outputs.conf
-sslCertPath = $SPLUNK_HOME/etc/auth/server.pem
-sslRootCAPath = $SPLUNK_HOME/etc/auth/ca.pem
-sslVerifyServerCert = true
+## 3. Data Sources
+
+### A. Inventory Groups
+
+```yaml
+# Relevant groups from inventory
+role_deployment_server:
+  hosts:
+    dpl:                  # Our deployment server
+role_indexer:
+  hosts:
+    idx:                  # Our indexer
+output_splk_all:         # Hosts that need forwarder outputs
+  hosts:
+    dpl:
+    sh1:
+    sh2:
+    sh3:
+    uf:
 ```
 
-## Example: Configuring a Deployment Server
+### B. Host Variables (dpl example)
 
-Let's follow exactly what happens when setting up a deployment server role, from start to finish.
+```yaml
+dpl:
+  ansible_host: ansible@dpl@orb
+  splunk_env_name: splk
+  splunk_output_list:
+    indexer:
+      - idx              # Points to our indexer
+  splunk_outputs: all    # This host gets all outputs
+```
 
-### 1. Entry Point: deploy_site.yml
+## 4. Configuration Flow
 
-When you run `ansible-playbook deploy_site.yml`, this triggers:
+### Role Calling Hierarchy
+
+The diagram below illustrates the complete flow of how Ansible roles and tasks interact to deploy Splunk configurations. The process begins with the top-level playbook and flows through various roles and tasks, with each step performing specific configuration actions. The code examples following the diagram demonstrate the actual implementation of each step.
+
+```mermaid
+flowchart TD
+    %% Top Level Flow
+    A[deploy_site.yml] -->|1. Import| B[setup_splunk_roles.yml]
+    B -->|2. Deploy to<br>role_deployment_server| C[deployment_server<br>main.yml]
+  
+    %% Deployment Server Role Calls
+    C -->|"3a. include_role<br>when: not indexer"| D["baseconfig_app<br>(Local Instance)"]
+    C -->|"3b. include_role<br>when: ssl=true"| E["baseconfig_app<br>(SSL Config)"]
+    C -->|"3c. include_role"| F["baseconfig_app<br>(Deployment Apps)"]
+  
+    %% BaseConfig App Dynamic Loading
+    D --> G[install_app.yml]
+    D --> H["{{app_name}}.yml"]
+    D --> I["save_app.yml<br>when: save_config=true"]
+  
+    E --> G
+    E --> H
+    E --> I
+  
+    F --> G
+    F --> H
+    F --> I
+  
+    %% Configuration Sources
+    J["Software/Configurations<br>Base/"] --> G
+    K["etc/deployment-apps/"] --> G
+  
+    %% Validation and Error Handling
+    H --> L[Configuration<br>Validation]
+    L -->|Success| M[Notify Handler:<br>restart splunk]
+    L -->|Failure| N[Fail Task]
+  
+    subgraph "1. Top Level"
+        A
+        B
+    end
+  
+    subgraph "2. Role"
+        C
+    end
+  
+    subgraph "3. Base Config App"
+        D
+        E
+        F
+    end
+  
+    subgraph "4. Tasks"
+        G
+        H
+        I
+    end
+  
+    subgraph "5. Sources"
+        J
+        K
+    end
+  
+    subgraph "6. Validation"
+        L
+        M
+        N
+    end
+
+    %% Styling
+    classDef task fill:#f9f,stroke:#333,stroke-width:2px
+    classDef source fill:#bbf,stroke:#333,stroke-width:2px
+    classDef validation fill:#bfb,stroke:#333,stroke-width:2px
+  
+    class G,H,I task
+    class J,K source
+    class L,M,N validation
+```
+
+#### Step 1: Top Level Playbook
 
 ```yaml
 # deploy_site.yml
 - name: setup splunk roles
-  tags: [splunk, splunk_roles]
+  tags:
+    - splunk
+    - splunk_roles
   import_playbook: setup_splunk_roles.yml
 ```
 
-### 2. Role Assignment (setup_splunk_roles.yml)
-
-The deployment server role is assigned to hosts in the role_deployment_server group:
+#### Step 2: Role Assignment
 
 ```yaml
 # setup_splunk_roles.yml
@@ -315,177 +166,227 @@ The deployment server role is assigned to hosts in the role_deployment_server gr
     - deployment_server
 ```
 
-### 3. Base Configuration Apps
+#### Step 3: Deployment Server Role Calls
 
-Let's look at one specific app: org_all_forwarder_outputs
-
-1. **Initial State** (Software/Configurations - Base/org_all_forwarder_outputs/local/outputs.conf):
-```ini
-[tcpout]
-defaultGroup = primary_indexers 
-
-[tcpout:primary_indexers]
-server = server_one:9997, server_two:9997
-```
-
-2. **Deployment Server Processing** (deployment_server/tasks/main.yml):
 ```yaml
-# First, install for local instance
+# roles/deployment_server/tasks/main.yml
+
+# 3a. Local Instance Configuration
 - name: apply baseconfig app org_all_forwarder_outputs
   include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'
-    app_path: '{{splunk_home}}/etc/apps'
+    app_path: '{{splunk_home}}/etc/apps'  # Local instance
+  when: inventory_hostname not in groups.role_indexer
 
-# Then, prepare for deployment to other instances
+# 3b. SSL Configuration
+- name: install certs for web ssl
+  include_role:
+    name: baseconfig_app
+    tasks_from: splunk_ssl_web_certs
+  when: splunk_ssl.web.enable == true
+
+# 3c. Deployment Apps Configuration
 - name: apply baseconfig app org_all_forwarder_outputs
   include_role:
     name: baseconfig_app
   vars:
     app_name: 'org_all_forwarder_outputs'
     app_path: '{{ splunk_home }}/etc/deployment-apps'
-    # Get dynamic values from inventory
-    splunk_output_list: "{{ hostvars[groups['output_'+splunk_env_name+'_'+output_name][0]]['splunk_output_list'] }}"
+    splunk_output_list: "{{ hostvars[groups['output_splk_all'][0]]['splunk_output_list'] }}"
 ```
 
-### 4. Configuration Modification Flow
+#### Step 4: BaseConfig App Dynamic Loading
 
-Let's track how the configuration changes through each step:
-
-1. **Base App Installation** (baseconfig_app/tasks/install_app.yml):
 ```yaml
-# 1. Find the app
+# roles/baseconfig_app/tasks/main.yml
+- import_tasks: "install_app.yml"
+- import_tasks: "{{app_name}}.yml"
+- name: call save_app
+  include_tasks: "save_app.yml"
+  when: splunk_save_baseconfig_apps|default(false) == true
+```
+
+#### Step 5: Installation and Configuration
+
+```yaml
+# roles/baseconfig_app/tasks/install_app.yml
 - name: find path to baseconfig app
   find:
     path: "{{ splunk_baseconfig }}/"
-    pattern: "org_all_forwarder_outputs"
+    pattern: "{{ app_name }}"
+    file_type: directory
   register: baseapp_dir
 
-# 2. Copy initial files
 - name: copy local files
   copy:
     src: "{{ baseapp_dir.files.0.path }}/local/*"
-    dest: "{{ splunk_home }}/etc/apps/org_all_forwarder_outputs/local/"
+    dest: "{{ app_path }}/{{ app_dest_name }}/local/"
+    mode: 0644
 ```
 
-2. **Dynamic Configuration** (baseconfig_app/tasks/org_all_forwarder_outputs.yml):
-```yaml
-# 3. Update defaultGroup based on environment
-- name: "setting defaultGroup value"
-  ini_file:
-    path: ".../outputs.conf"
-    section: tcpout
-    option: defaultGroup
-    value: "{{ splunk_outputs_tcpout_list|map('regex_replace','^(.*)$','\\1_indexers')|join(',') }}"
+#### Step 6: Configuration Processing and Dynamic Variable Generation
 
-# 4. Configure indexer discovery
-- name: "setting indexerDiscovery"
-  ini_file:
-    path: ".../outputs.conf"
-    section: "tcpout:{{ item.idxc_name+'_indexers' }}"
-    option: indexerDiscovery
-    value: "{{ item.idxc_name+'_indexers' }}"
-```
+The configuration processing in Splunk Platform Automator relies heavily on Ansible's Jinja2 templating system for dynamic variable generation. Let's examine the key syntax patterns in `dynamic.yml`:
 
-### 5. Configuration State Changes
+##### A. Jinja2 Template Syntax Patterns
 
-Let's see how outputs.conf evolves:
+1. **List Comprehension and Filtering**:
 
-1. **Initial State**:
+   ```yaml
+   # Pattern 1: Simple filter chain
+   splunk_outputs_idx_list: "{{ 
+     splunk_output_list['indexer']    # Get indexer list
+     |default([])                     # Default to empty if missing
+     |intersect(                      # Find common elements
+       groups['splunk_env_'+splunk_env_name]  # With current env
+     ) 
+   }}"
+
+   # Pattern 2: Complex transformation with set operations
+   splunk_idxc_name_list_all_env: "{{ 
+     groups                           # All ansible groups
+     |map('regex_search','idxcluster_.*')  # Find cluster groups
+     |select('string')               # Remove empty matches
+     |list                           # Convert to list
+   }}"
+   ```
+2. **Multi-line Variable Construction**:
+
+   ```yaml
+   # Pattern: Using >- for clean YAML multiline
+   splunk_outputs_tcpout_list: >-
+     {%- set res = [] -%}              # Initialize result
+     {%- for idxc in splunk_outputs_idxc_list.keys() -%}
+       {%- set ignored = res.extend([idxc]) -%}  # Add each cluster
+     {%- endfor -%}
+     {%- if splunk_outputs_idx_list|length > 0 -%}
+       {%- set ignored = res.extend(['all']) -%}  # Add standalone
+     {%- endif -%}
+     {{ res }}                         # Output result
+   ```
+
+   - `>-`: YAML multiline operator (strip newlines)
+   - `{%-`: Strip whitespace before block
+   - `-%}`: Strip whitespace after block
+3. **Dictionary Construction**:
+
+   ```yaml
+   splunk_outputs_discovery_idxc_list: >-
+     {%- set res = [] -%}
+     {%- for cm in splunk_idxc_cm_list -%}
+       {%- if 'idxc_discovery_password' in hostvars[cm] -%}
+         {%- set ignored = res.extend([{
+           'master': cm,
+           'idxc_name': hostvars[cm]['idxc_name'],
+           'password': hostvars[cm]['idxc_discovery_password']
+         }]) -%}
+       {%- endif -%}
+     {%- endfor -%}
+     {{ res }}
+   ```
+
+   - Complex dictionary construction
+   - Conditional inclusion based on host variables
+   - Nested data structures
+4. **Version-based Conditionals**:
+
+   ```yaml
+   splunk_cluster_manager_mode: "{%- if 
+     splunk_installed_version is version_compare('9.0', '>=') 
+   -%}manager{%- else -%}master{%- endif -%}"
+   ```
+
+   - Version comparison operators
+   - Inline conditionals
+   - String substitution
+
+##### B. Key Template Functions
+
+1. **Set Operations**:
+
+   - `intersect()`: Find common elements
+   - `difference()`: Remove elements
+   - `union()`: Combine unique elements
+2. **String Operations**:
+
+   - `regex_search()`: Pattern matching
+   - `regex_replace()`: String transformation
+   - `replace()`: Simple substitution
+3. **List Operations**:
+
+   - `map()`: Transform each element
+   - `select()`: Filter elements
+   - `extend()`: Add multiple elements
+4. **Dictionary Operations**:
+
+   - `keys()`: Get dictionary keys
+   - `update()`: Modify dictionary
+   - `default()`: Provide default values
+
+This templating system ensures:
+
+- Dynamic configuration based on environment
+- Proper variable scoping
+- Efficient set operations
+- Version-aware configurations
+
+## 5. Configuration Files
+
+### A. Initial Template
+
 ```ini
+# Software/Configurations - Base/org_all_forwarder_outputs/local/outputs.conf
 [tcpout]
 defaultGroup = primary_indexers 
 
 [tcpout:primary_indexers]
-server = server_one:9997, server_two:9997
+server = server_one:9997
 ```
 
-2. **After defaultGroup Update** (assuming environment has idx1, idx2):
+### B. Final Configuration
+
 ```ini
+# /opt/splunk/etc/deployment-apps/org_all_forwarder_outputs/local/outputs.conf
 [tcpout]
-defaultGroup = idx1_indexers,idx2_indexers 
+defaultGroup = primary_indexers
 
 [tcpout:primary_indexers]
-server = server_one:9997, server_two:9997
+server = idx:9997
+
+# Optional SSL Configuration
+sslCertPath = $SPLUNK_HOME/etc/auth/server.pem
+sslRootCAPath = $SPLUNK_HOME/etc/auth/cacert.pem
+sslPassword = password
 ```
 
-3. **After Indexer Discovery**:
-```ini
-[tcpout]
-defaultGroup = idx1_indexers,idx2_indexers 
+## 6. Verification Points
 
-[tcpout:idx1_indexers]
-server = idx1-1:9997,idx1-2:9997
-indexerDiscovery = idx1_indexers
+### A. On Deployment Server (dpl)
 
-[tcpout:idx2_indexers]
-server = idx2-1:9997,idx2-2:9997
-indexerDiscovery = idx2_indexers
+```bash
+# Check deployment apps
+ls -l /opt/splunk/etc/deployment-apps/org_all_forwarder_outputs/local/
+cat /opt/splunk/etc/deployment-apps/org_all_forwarder_outputs/local/outputs.conf
 
-[indexer_discovery:idx1_indexers]
-pass4SymmKey = your_secret_key
-manager_uri = https://cm1.splunk.example:8089
+# Check serverclass configuration
+cat /opt/splunk/etc/system/local/serverclass.conf
 
-[indexer_discovery:idx2_indexers]
-pass4SymmKey = your_secret_key
-manager_uri = https://cm2.splunk.example:8089
+# Check Splunk status
+/opt/splunk/bin/splunk status
+
+# Check ports
+ss -tunlp | grep "8089\|8000"
 ```
 
-### 6. Variable Tracking
+### B. On Forwarders
 
-Throughout this process, configurations are tracked in `splunk_conf`:
+```bash
+# Check received configuration
+ls -l /opt/splunk/etc/apps/org_all_forwarder_outputs/local/
+cat /opt/splunk/etc/apps/org_all_forwarder_outputs/local/outputs.conf
 
-```yaml
-# Initial state
-splunk_conf:
-  outputs.conf:
-    tcpout:
-      defaultGroup: primary_indexers
-    tcpout:primary_indexers:
-      server: server_one:9997, server_two:9997
-
-# After modifications
-splunk_conf:
-  outputs.conf:
-    tcpout:
-      defaultGroup: idx1_indexers,idx2_indexers
-    tcpout:idx1_indexers:
-      server: idx1-1:9997,idx1-2:9997
-      indexerDiscovery: idx1_indexers
-    tcpout:idx2_indexers:
-      server: idx2-1:9997,idx2-2:9997
-      indexerDiscovery: idx2_indexers
-    indexer_discovery:idx1_indexers:
-      pass4SymmKey: your_secret_key
-      manager_uri: https://cm1.splunk.example:8089
+# Verify deployment client status
+/opt/splunk/bin/splunk show deployment-client
 ```
-
-### 7. Final Steps
-
-1. **Serverclass Configuration**:
-```ini
-# serverclass.conf
-[serverClass:forwarder_outputs]
-whitelist.0 = *
-[serverClass:forwarder_outputs:app:org_all_forwarder_outputs]
-repository = $SPLUNK_HOME/etc/deployment-apps/org_all_forwarder_outputs
-```
-
-2. **Deployment Tracking**:
-```yaml
-- name: save serverclass file
-  synchronize:
-    src: "{{ splunk_install_dir }}/splunk/etc/system/local/serverclass.conf"
-    dest: "../apps/{{inventory_hostname}}/..."
-```
-
-### 8. Result
-
-After this process:
-1. The deployment server has its local outputs.conf configured
-2. A deployable version of org_all_forwarder_outputs is prepared in deployment-apps
-3. Serverclass.conf is configured to deploy this app to appropriate clients
-4. All configurations are tracked in both files and variables
-
-This example shows how a single app's configuration flows through the system, gets modified based on environment variables, and is prepared for deployment to other Splunk instances.
