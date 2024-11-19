@@ -43,3 +43,21 @@ Software/*
 inventory_output.yml
 .vscode
 
+terraform/terraform.tfstate
+terraform/.terraform.lock.hcl
+
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfvars.json
+.terraformrc
+terraform.rc
+.terraform.lock.hcl
+tfplan
+crash.log
+crash.*.log
+**/override.tf
+**/override.tf.json
+*_override.tf
+*_override.tf.json

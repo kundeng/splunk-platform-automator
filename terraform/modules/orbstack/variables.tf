@@ -1,23 +1,21 @@
 variable "environment" {
-  description = "Name of the environment (e.g., dev, prod)"
+  description = "Environment name"
   type        = string
 }
 
 variable "hosts" {
-  description = "Map of host configurations from the Ansible inventory"
-  type = map(object({
-    ansible_host    = string
-    ansible_user    = string
-    orbstack_image  = string
-  }))
+  description = "Map of host configurations from inventory"
+  type        = map(any)
 }
 
-variable "settings" {
-  description = "OrbStack-specific settings"
-  type        = map(any)
-  
-  validation {
-    condition     = can(lookup(var.settings, "default_image", null))
-    error_message = "OrbStack settings must include 'default_image'"
-  }
+variable "default_image" {
+  description = "Default container image to use for Splunk hosts"
+  type        = string
+  default     = "almalinux:9"
+}
+
+variable "ansible_user" {
+  description = "Default user for Ansible to connect with"
+  type        = string
+  default     = "root"
 }

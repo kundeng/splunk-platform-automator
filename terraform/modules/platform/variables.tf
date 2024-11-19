@@ -11,12 +11,12 @@ variable "inventory_file" {
 variable "provider_config" {
   description = "Provider configuration including type and settings"
   type = object({
-    type     = string
+    provider_type     = string
     settings = map(any)
   })
   
   validation {
-    condition     = contains(["orbstack", "aws"], var.provider_config.type)
+    condition     = contains(["orbstack", "aws"], var.provider_config.provider_type)
     error_message = "Provider type must be one of: orbstack, aws"
   }
 }

@@ -7,95 +7,154 @@ vars:
   EXAMPLES_DIR: examples
   DEFAULT_ENV: dev
   DEFAULT_PROVIDER: orbstack
+  INVENTORY_OUTPUT: "{{.CONFIG_DIR}}/inventory_output.yml"
 
 tasks:
-  init:
-    desc: Initialize development environment
+  check:venv:
+    internal: true
     cmds:
-      - python3 -m venv .venv
-      - source .venv/bin/activate && pip install -r requirements.txt
-      - terraform -chdir={{.TERRAFORM_DIR}}/environments/{{.DEFAULT_ENV}} init
+      - test -f ./.venv/bin/pip
+    preconditions:
+      - msg: "Virtual environment not found. Please run 'task setup-venv' and activate it with '. ./.venv/bin/activate'"
+        sh: "test -f ./.venv/bin/pip"
 
-  validate:config:
-    desc: Validate splunk_config.yml file
+  default:
+    desc: "Show help information"
+    silent: true
     cmds:
-      - source .venv/bin/activate && python -m ansible.plugins.inventory.splunk-platform-automator --validate {{.CLI_ARGS | default "config/splunk_config.yml"}}
+      - echo "Splunk Platform Automator\n"
+      - echo "First time setup:"
+      - echo "1. Run 'task setup-venv' to create Python virtual environment"
+      - echo "2. Run '. ./.venv/bin/activate' to activate the environment"
+      - echo "3. Run 'task setup:deps' to install dependencies\n"
+      - echo "Available tasks:"
+      - task --list
 
-  generate:inventory:
-    desc: Generate Ansible inventory from configuration
+  # Setup and Environment Tasks
+  setup-venv:
+    desc: "Setup python virtual environment"
+    preconditions:
+      - msg: "Must not be run as root"
+        sh: "[ $(id -u) -ne 0 ]"
     cmds:
-      - source .venv/bin/activate && python -m ansible.plugins.inventory.splunk-platform-automator --list {{.CLI_ARGS | default "config/splunk_config.yml"}}
+      - rm -rf ./.venv
+      - python3 -m venv ./.venv
+      - |
+        echo "Virtual environment created successfully!"
+        echo "Next step: Run '. ./.venv/bin/activate' to activate it"
 
-  plan:
-    desc: Plan infrastructure changes
-    deps: [validate:config]
+  setup:deps:
+    desc: "Install project dependencies"
+    silent: true
+    deps: [check:venv]
+    cmds:
+      - pip install -r requirements.txt
+
+  # Terraform-specific Tasks
+  tf:init:
+    desc: "Initialize Terraform working directory"
+    silent: true
     dir: '{{.TERRAFORM_DIR}}/environments/{{.CLI_ARGS | default .DEFAULT_ENV}}'
+    deps: [check:venv, ansible:generate:inventory]
+    cmds:
+      - terraform init
+
+  tf:validate:
+    desc: "Validate Terraform configurations"
+    silent: true
+    dir: '{{.TERRAFORM_DIR}}/environments/{{.CLI_ARGS | default .DEFAULT_ENV}}'
+    deps: [check:venv, ansible:generate:inventory]
+    cmds:
+      - terraform validate
+
+  tf:plan:
+    desc: "Plan Terraform infrastructure changes"
+    silent: true
+    dir: '{{.TERRAFORM_DIR}}/environments/{{.CLI_ARGS | default .DEFAULT_ENV}}'
+    deps: [check:venv, ansible:generate:inventory]
     cmds:
       - terraform plan -out=tfplan
 
-  apply:
-    desc: Apply infrastructure changes
-    deps: [validate:config]
+  tf:apply:
+    desc: "Apply Terraform infrastructure changes"
+    silent: true
     dir: '{{.TERRAFORM_DIR}}/environments/{{.CLI_ARGS | default .DEFAULT_ENV}}'
+    deps: [check:venv, ansible:generate:inventory]
     cmds:
       - terraform apply tfplan
 
-  destroy:
-    desc: Destroy infrastructure
+  tf:destroy:
+    desc: "Destroy Terraform infrastructure"
+    silent: true
     dir: '{{.TERRAFORM_DIR}}/environments/{{.CLI_ARGS | default .DEFAULT_ENV}}'
+    deps: [check:venv, ansible:generate:inventory]
     cmds:
       - terraform destroy
 
-  ansible:ping:
-    desc: Test Ansible connectivity to all hosts
-    deps: [generate:inventory]
+  # Ansible-specific Tasks
+  ansible:validate:config:
+    desc: "Validate Ansible inventory configuration"
+    silent: true
+    deps: [check:venv]
     cmds:
-      - source .venv/bin/activate && ansible all -m ping -i inventory_output.yml
+      - ansible-inventory --list --yaml -i {{.CLI_ARGS | default "config/splunk_config.yml"}}
+
+  ansible:generate:inventory:
+    desc: "Generate Ansible inventory from configuration"
+    silent: true
+    deps: [check:venv]
+    cmds:
+      - ansible-inventory --list --yaml -i {{.CLI_ARGS | default "config/splunk_config.yml"}} > {{.INVENTORY_OUTPUT}}
 
   ansible:deploy:
-    desc: Deploy Splunk configuration using Ansible
-    deps: [generate:inventory]
+    desc: "Deploy Splunk configuration using Ansible"
+    deps: [ansible:generate:inventory, check:venv]
+    silent: true
     cmds:
-      - source .venv/bin/activate && ansible-playbook -i inventory_output.yml playbooks/deploy.yml
+      - ansible-playbook -i {{.INVENTORY_OUTPUT}} {{.ANSIBLE_DIR}}/deploy_site.yml
 
-  test:
-    desc: Run tests
+  # End-to-end Tasks
+  deploy:
+    desc: "Deploy complete infrastructure and configure Splunk"
+    deps: [setup:deps, check:venv]
+    vars:
+      ENV: '{{.CLI_ARGS | default .DEFAULT_ENV}}'
     cmds:
-      - source .venv/bin/activate && python -m pytest tests/
-
-  lint:
-    desc: Run linters
-    cmds:
-      - source .venv/bin/activate && flake8 ansible/
-      - source .venv/bin/activate && pylint ansible/
-      - terraform fmt -check -recursive {{.TERRAFORM_DIR}}
-
-  format:
-    desc: Format code
-    cmds:
-      - source .venv/bin/activate && black ansible/
-      - terraform fmt -recursive {{.TERRAFORM_DIR}}
-
-  example:deploy:
-    desc: Deploy an example configuration
-    cmds:
-      - task: validate:config
-        vars: {CLI_ARGS: "{{.EXAMPLES_DIR}}/{{.CLI_ARGS}}"}
-      - task: generate:inventory
-        vars: {CLI_ARGS: "{{.EXAMPLES_DIR}}/{{.CLI_ARGS}}"}
-      - task: plan
-      - task: apply
+      - task: ansible:validate:config
+      - task: ansible:generate:inventory
+      - task: tf:init
+        vars: { CLI_ARGS: '{{.ENV}}' }
+      - task: tf:plan
+        vars: { CLI_ARGS: '{{.ENV}}' }
+      - task: tf:apply
+        vars: { CLI_ARGS: '{{.ENV}}' }
       - task: ansible:deploy
 
-  clean:
-    desc: Clean up generated files
+  destroy:all:
+    desc: "Destroy all infrastructure and clean up"
+    silent: true
+    deps: [check:venv]
+    vars:
+      ENV: '{{.CLI_ARGS | default .DEFAULT_ENV}}'
     cmds:
-      - rm -f inventory_output.yml
-      - rm -rf .terraform
-      - rm -f terraform.tfstate*
-      - rm -f tfplan
+      - task: tf:destroy
+        vars: { CLI_ARGS: '{{.ENV}}' }
+      - rm -f {{.INVENTORY_OUTPUT}}
 
-  default:
-    desc: Show available tasks
+  orb:printhosts:
+    desc: "Print all OrbStack machine IPs (development helper)"
+    silent: true
     cmds:
-      - task --list
+      - |
+        echo "# Generated OrbStack hosts - $(date)" > config/hosts.txt
+        for m in $(orb list --format json | jq -r '.[].name'); do
+          ip=$(orb run -m $m 'hostname -I' | tr -d '\n')
+          echo "$ip $m" >> config/hosts.txt
+        done
+        cat config/hosts.txt
+
+  orb:run:
+    desc: "Run a command on an OrbStack machine"
+    silent: true
+    cmds:
+      - orb -m {{.CLI_ARGS}}

@@ -1,5 +1,16 @@
 terraform {
   required_version = ">= 0.13"
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 5.0"
+    }
+  }
+}
+
+# Configure AWS provider
+provider "aws" {
+  region = var.provider_config.settings.region
 }
 
 # Create Splunk platform using the platform module

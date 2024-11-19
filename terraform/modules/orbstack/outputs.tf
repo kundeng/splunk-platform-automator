@@ -1,7 +1,9 @@
-output "hosts" {
-  description = "Created host configurations"
-  value = {
-    for hostname, vm in null_resource.vms :
-    hostname => jsondecode(vm.triggers.host_config)
-  }
+output "machines" {
+  description = "Information about all created machines"
+  value       = module.orbstack_machines.machine_info
+}
+
+output "hosts_entries" {
+  description = "Entries added to /etc/hosts"
+  value       = module.orbstack_machines.hosts_entries
 }

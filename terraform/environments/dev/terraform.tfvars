@@ -1,6 +1,7 @@
 provider_config = {
-  type = "orbstack"
+  provider_type = "orbstack"
   settings = {
     default_image = "almalinux:9"
+    ansible_user = "ansible"
   }
 }
