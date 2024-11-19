@@ -154,6 +154,35 @@ This will:
 3. Provision infrastructure
 4. Deploy and configure Splunk
 
+## Host Management
+
+The system supports two methods for managing host configurations:
+
+### 1. Primary Method: Terraform-managed (Recommended)
+- Terraform generates the `inventory/hosts` file during infrastructure provisioning
+- Host entries are automatically managed based on your `splunk_config.yml`
+- DNS names follow the pattern `hostname.orb.local` for OrbStack
+- This is automatically handled when running `task tf:apply`
+
+### 2. Fallback Method: Manual Configuration
+For scenarios where Terraform is not managing the infrastructure:
+- Create a `config/manual_hosts_mapping.txt` file
+- Add your host mappings in the format: `IP_ADDRESS HOSTNAME`
+- Enable with `update_hosts_file: true` in your configuration
+- Useful for:
+  - Existing infrastructure not managed by Terraform
+  - Manual host mapping requirements
+  - Running Ansible independently of Terraform
+
+Example `manual_hosts_mapping.txt`:
+```
+192.168.1.10 splunk-idx1
+192.168.1.11 splunk-idx2
+192.168.1.20 splunk-sh1
+```
+
+**Note**: Only use one method at a time to avoid conflicts in host resolution.
+
 # Support
 
 **Note: This framework is not officially supported by Splunk. It is being developed on best effort basis.**

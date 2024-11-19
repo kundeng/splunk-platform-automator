@@ -144,16 +144,19 @@ tasks:
       - rm -f {{.INVENTORY_OUTPUT}}
 
   orb:printhosts:
-    desc: "Print all OrbStack machine IPs (development helper)"
+    desc: "Generate manual host mappings from OrbStack machines"
     silent: true
     cmds:
       - |
-        echo "# Generated OrbStack hosts - $(date)" > config/hosts.txt
+        echo "# Manual host mappings from OrbStack machines - $(date)" > config/manual_hosts_mapping.txt
+        echo "# Format: IP_ADDRESS HOSTNAME" >> config/manual_hosts_mapping.txt
+        echo "# Note: This is a fallback for when not using Terraform-managed infrastructure" >> config/manual_hosts_mapping.txt
+        echo "" >> config/manual_hosts_mapping.txt
         for m in $(orb list --format json | jq -r '.[].name'); do
           ip=$(orb run -m $m 'hostname -I' | tr -d '\n')
-          echo "$ip $m" >> config/hosts.txt
+          echo "$ip $m" >> config/manual_hosts_mapping.txt
         done
-        cat config/hosts.txt
+        cat config/manual_hosts_mapping.txt
 
   orb:run:
     desc: "Run a command on an OrbStack machine"
