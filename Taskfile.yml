@@ -115,6 +115,63 @@ tasks:
     cmds:
       - ansible-playbook -i {{.INVENTORY_OUTPUT}} {{.ANSIBLE_DIR}}/deploy_site.yml
 
+  # Example Tasks
+  example:list:
+    desc: "List available example configurations"
+    cmds:
+      - |
+        echo "Available example configurations:"
+        ls -1 examples/*_orbstack.yml | sed 's|examples/||' | sed 's|.yml$||'
+
+  example:use:
+    desc: "Use an example configuration (e.g., task example:use -- idx_sh_uf_orbstack)"
+    cmds:
+      - |
+        example_name="{{.CLI_ARGS}}"
+        if [ -z "$example_name" ]; then
+          echo "Error: Please specify an example name (without .yml extension)"
+          echo "Available examples:"
+          task example:list
+          exit 1
+        fi
+        
+        # Backup existing config if it exists
+        if [ -f config/splunk_config.yml ]; then
+          backup_file="config/splunk_config.yml.backup.$(date +%Y%m%d_%H%M%S)"
+          echo "Backing up existing config to $backup_file"
+          cp config/splunk_config.yml "$backup_file"
+        fi
+        
+        # Create config directory if it doesn't exist
+        mkdir -p config
+        
+        # Copy example to config
+        example_file="examples/${example_name}.yml"
+        if [ ! -f "$example_file" ]; then
+          echo "Error: Example $example_file not found"
+          echo "Available examples:"
+          task example:list
+          exit 1
+        fi
+        
+        echo "Using example configuration: ${example_name}"
+        cp "$example_file" config/splunk_config.yml
+        echo "Configuration copied to config/splunk_config.yml"
+        echo "You can now run: task tf:init && task tf:apply"
+
+  example:restore:
+    desc: "Restore the most recent backup of splunk_config.yml"
+    cmds:
+      - |
+        latest_backup=$(ls -t config/splunk_config.yml.backup.* 2>/dev/null | head -1)
+        if [ -z "$latest_backup" ]; then
+          echo "No backup files found in config directory"
+          exit 1
+        fi
+        echo "Restoring from backup: $latest_backup"
+        cp "$latest_backup" config/splunk_config.yml
+        echo "Configuration restored to config/splunk_config.yml"
+
   # End-to-end Tasks
   deploy:
     desc: "Deploy complete infrastructure and configure Splunk"
