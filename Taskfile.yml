@@ -82,6 +82,8 @@ tasks:
     deps: [check:venv, ansible:generate:inventory]
     cmds:
       - terraform apply tfplan
+      - mkdir -p ../../../inventory
+      - terraform output -json hosts | jq -r '.ansible_inventory' > ../../../inventory/hosts
 
   tf:destroy:
     desc: "Destroy Terraform infrastructure"
