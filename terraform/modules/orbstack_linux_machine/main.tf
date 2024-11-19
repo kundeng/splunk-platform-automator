@@ -10,11 +10,20 @@ resource "null_resource" "orbstack_machine" {
     when = create
   }
 
+  # Clean up the machine when destroying
+  provisioner "local-exec" {
+    command = "orbctl delete ${self.triggers.name}"
+    interpreter = ["/bin/bash", "-c"]
+    when = destroy
+    on_failure = continue
+  }
+
   triggers = {
     name         = each.value.name
     distro       = each.value.distro
     architecture = each.value.architecture
     username     = var.username
+    orbstack_cli = var.orbstack_cli_path
   }
 }
 

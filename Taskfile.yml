@@ -86,12 +86,20 @@ tasks:
       - terraform output -json hosts | jq -r '.ansible_inventory' > ../../../inventory/hosts
 
   tf:destroy:
-    desc: "Destroy Terraform infrastructure"
+    desc: "Destroy Terraform infrastructure (requires confirmation)"
     silent: true
     dir: '{{.TERRAFORM_DIR}}/environments/{{.CLI_ARGS | default .DEFAULT_ENV}}'
     deps: [check:venv, ansible:generate:inventory]
     cmds:
       - terraform destroy
+
+  tf:destroy-auto:
+    desc: "Destroy Terraform infrastructure automatically without confirmation"
+    silent: true
+    dir: '{{.TERRAFORM_DIR}}/environments/{{.CLI_ARGS | default .DEFAULT_ENV}}'
+    deps: [check:venv, ansible:generate:inventory]
+    cmds:
+      - terraform destroy -auto-approve
 
   # Ansible-specific Tasks
   ansible:validate:config:
