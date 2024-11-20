@@ -3,7 +3,7 @@
 plugin: splunk-platform-automator
 
 orbstack:
-  image: almalinux:9
+  image: alma:9
   ansible_user: root
 
 # Splunk default settings
@@ -36,16 +36,16 @@ splunk_defaults:
 # Splunk hosts with its settings
 splunk_hosts:
   # Indexer
-  - name: idx
+  - name: idx1
     roles:
       - indexer
 
   # Search Head
-  - name: sh
+  - name: sh1
     roles:
       - search_head
 
   # Universal Forwarder
-  - name: uf
+  - name: uf1
     roles:
       - universal_forwarder

@@ -4,7 +4,7 @@ os:
   # Do not set a default time zone, will default to the one from the ansible host
   # time_zone: "Europe/Zurich"
   # set_hostname: true
-  update_hosts_file: true
+  update_hosts_file: true  # Needed for manual provisioning to ensure hosts can resolve each other
   disable_selinux: true
   disable_apparmor: true
   # Needed for the Unix TA

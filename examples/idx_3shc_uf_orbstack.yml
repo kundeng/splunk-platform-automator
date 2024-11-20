@@ -3,7 +3,7 @@
 plugin: splunk-platform-automator
 
 orbstack:
-  image: "almalinux:9"
+  image: "alma:9"
   ansible_user: "root"
 
 virtualization: orbstack
