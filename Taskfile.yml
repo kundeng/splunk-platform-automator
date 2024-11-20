@@ -238,8 +238,8 @@ tasks:
         
         # Cleanup
         echo "Cleaning up..."
-        orbctl delete idx1 sh1 uf1
-        rm -f inventory/hosts
+        echo "orbctl delete idx1 sh1 uf1"
+        echo "rm -f inventory/hosts"
         
         echo "=== Test completed successfully ==="
 
