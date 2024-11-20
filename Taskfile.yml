@@ -233,7 +233,7 @@ tasks:
         
         echo "Testing Splunk services..."
         orb run -m idx1 systemctl status splunk
-        orb run -m sh1 'systemctl status splunk
+        orb run -m sh1 systemctl status splunk
         orb run -m uf1 systemctl status splunkforwarder
         
         # Cleanup
