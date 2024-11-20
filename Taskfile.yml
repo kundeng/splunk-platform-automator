@@ -118,10 +118,10 @@ tasks:
 
   ansible:deploy:
     desc: "Deploy Splunk configuration using Ansible"
-    deps: [ansible:generate:inventory, check:venv]
+    deps: [check:venv]
     silent: true
     cmds:
-      - ansible-playbook -i {{.INVENTORY_OUTPUT}} {{.ANSIBLE_DIR}}/deploy_site.yml
+      - ansible-playbook {{.ANSIBLE_DIR}}/deploy_site.yml
 
   # Example Tasks
   example:list:
@@ -180,6 +180,75 @@ tasks:
         cp "$latest_backup" config/splunk_config.yml
         echo "Configuration restored to config/splunk_config.yml"
 
+  # OrbStack-specific Tasks
+  orb:inventory:
+    desc: "Generate inventory from OrbStack VMs"
+    silent: true
+    cmds:
+      - |
+        # Get list of machines and their IPs
+        for vm in $(orb list --format json | jq -r '.[].name'); do
+          ip=$(orb run -m $vm hostname -I | cut -d' ' -f1 | tr -d '\n')
+          if [ -n "$ip" ]; then
+            echo "$vm ip_addr=$ip public_dns_name=$vm.orb.local"
+          fi
+        done
+
+  test:manual-provisioning:
+    desc: "Test manual provisioning workflow"
+    silent: true
+    cmds:
+      - |
+        echo "=== Starting manual provisioning test ==="
+        
+        # Clean up any previous test VMs
+        echo "Cleaning up previous state..."
+        orbctl delete idx1 sh1 uf1 2>/dev/null || true
+        
+        # Copy example config
+        echo "Setting up configuration..."
+        cp examples/idx_sh_uf_orbstack.yml config/splunk_config.yml
+        
+        # Create test VMs
+        echo "Creating test VMs..."
+        orb create --arch amd64 alma:9 idx1
+        orb create --arch amd64 alma:9 sh1
+        orb create --arch amd64 alma:9 uf1
+        
+        # Wait for VMs to be ready
+        sleep 10
+        
+        # Generate and set inventory
+        echo "Setting up inventory..."
+        task orb:inventory > inventory/hosts
+        
+        # Deploy Splunk
+        echo "Deploying Splunk..."
+        task ansible:deploy
+        
+        # Test connectivity and basic Splunk functionality
+        echo "Testing connectivity..."
+        orb run -m idx1 ping -c 1 sh1
+        orb run -m sh1 ping -c 1 idx1
+        
+        echo "Testing Splunk services..."
+        orb run -m idx1 systemctl status splunk
+        orb run -m sh1 'systemctl status splunk
+        orb run -m uf1 systemctl status splunkforwarder
+        
+        # Cleanup
+        echo "Cleaning up..."
+        orbctl delete idx1 sh1 uf1
+        rm -f inventory/hosts
+        
+        echo "=== Test completed successfully ==="
+
+  orb:run:
+    desc: "Run a command on an OrbStack machine"
+    silent: true
+    cmds:
+      - orb -m {{.CLI_ARGS}}
+
   # End-to-end Tasks
   deploy:
     desc: "Deploy complete infrastructure and configure Splunk"
@@ -207,24 +276,3 @@ tasks:
       - task: tf:destroy
         vars: { CLI_ARGS: '{{.ENV}}' }
       - rm -f {{.INVENTORY_OUTPUT}}
-
-  orb:printhosts:
-    desc: "Generate manual host mappings from OrbStack machines"
-    silent: true
-    cmds:
-      - |
-        echo "# Manual host mappings from OrbStack machines - $(date)" > config/manual_hosts_mapping.txt
-        echo "# Format: IP_ADDRESS HOSTNAME" >> config/manual_hosts_mapping.txt
-        echo "# Note: This is a fallback for when not using Terraform-managed infrastructure" >> config/manual_hosts_mapping.txt
-        echo "" >> config/manual_hosts_mapping.txt
-        for m in $(orb list --format json | jq -r '.[].name'); do
-          ip=$(orb run -m $m 'hostname -I' | tr -d '\n')
-          echo "$ip $m" >> config/manual_hosts_mapping.txt
-        done
-        cat config/manual_hosts_mapping.txt
-
-  orb:run:
-    desc: "Run a command on an OrbStack machine"
-    silent: true
-    cmds:
-      - orb -m {{.CLI_ARGS}}
