@@ -2,89 +2,132 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](#license)
 
-Ever wanted to build a complex Splunk environment for testing, which looks as close as possible to a production deployment? Need to test a Splunk upgrade? See how Splunk indexer- or search head clustering works? Or just need to verify some configuration changes? This is the right place for you! The aim of this framework is to produce a Splunk environment in a fast and convenient way for testing purposes or maybe also for production use. The created Splunk installation and setup follows best practices.
+Looking for a lightweight, VM-based Splunk deployment solution optimized for Apple Silicon Macs? This is the first framework that lets you easily build and test Splunk environments on modern ARM-based MacBooks, with native performance and minimal resource overhead.
 
-This repository is a modernization of the infrastructure layer of the original [Splunk Platform Automator](https://github.com/splunk/splunk-platform-automator), replacing Vagrant with Terraform while maintaining the robust Ansible-based Splunk configuration and deployment.
+This repository modernizes the original [Splunk Platform Automator](https://github.com/splunk/splunk-platform-automator) for the Apple Silicon era, replacing Vagrant with Terraform and leveraging OrbStack for efficient virtualization. Whether you need to test Splunk upgrades, experiment with indexer clustering, or verify configuration changes, you can now do it all natively on your M1/M2 Mac.
 
-## Table of Contents
+## Quick Start
 
-- [Features](#features)
-- [Architecture](#architecture)
-- [Installation](#installation)
-- [Usage](#usage)
-- [Host Management](#host-management)
-- [Support](#support)
-- [Project Status](#project-status)
-- [License](#license)
+1. Install prerequisites:
+```bash
+# On macOS
+brew install ansible terraform python@3.11
 
-# Features
-
-- Single Source of Truth: All environment configuration defined in one `splunk_config.yml` file
-- Modern Infrastructure Layer:
-  - Terraform-based infrastructure provisioning
-  - OrbStack virtualization optimized for ARM-based macOS
-  - Future AWS support planned
-- Automated Workflow:
-  - Task-based automation for all operations
-  - Integrated validation and testing
-  - Seamless deployment pipeline
-- Configuration Management:
-  - Preserves original Ansible-based Splunk configuration
-  - Supports all Splunk Enterprise roles
-  - Best practice configurations maintained
-
-# Architecture
-
-```mermaid
-graph LR
-    %% Styling
-    classDef task fill:#99f,stroke:#333,stroke-width:4px
-    classDef config fill:#f9f,stroke:#333
-    classDef ansible fill:#fbf,stroke:#333
-    classDef infra fill:#bfb,stroke:#333
-    
-    %% Nodes
-    Task(Task Workflow)
-    Examples(Examples)
-    Config(splunk_config.yml)
-    Inventory(Ansible Inventory)
-    Terraform(Terraform)
-    Infra(Infrastructure)
-    Ansible(Ansible Config)
-    
-    %% Main Pipeline
-    Examples --> Config --> Inventory --> Terraform --> Infra --> Ansible
-    
-    %% Task Control
-    Task --> Examples & Config & Inventory & Terraform & Ansible
-    
-    %% Apply styles
-    class Task task
-    class Examples,Config config
-    class Inventory,Ansible ansible
-    class Terraform,Infra infra
+# Install required Python packages
+python -m pip install jmespath lxml  # Required for json_query and license checks
 ```
 
-# Installation
+2. Setup and deploy:
+```bash
+task setup-venv              # Create virtual environment
+. ./.venv/bin/activate      # Activate environment
+task setup:deps             # Install dependencies
 
-1. Make sure you have Python 3.6+ installed
-2. Install required packages:
-   ```bash
-   python -m pip install jmespath  # required for json_query calls
-   python -m pip install lxml      # required for license file checks
+task example:list                        # View available examples
+task example:use -- idx_3shc_uf_orbstack # Use example config
+task deploy                             # Deploy infrastructure and Splunk
+```
+
+For more complex deployments, check the [examples](examples) directory.
+
+## Why This Fork?
+
+This fork modernizes the infrastructure layer with Terraform, bringing several key benefits:
+
+1. **Modern Infrastructure Management**
+   - Infrastructure as Code (IaC) best practices
+   - Better state management and drift detection
+   - Native support for multiple cloud providers (AWS planned)
+   - Flexible virtualization support
+
+2. **Streamlined Architecture**
+   ```mermaid
+   graph LR
+       %% Styling
+       classDef task fill:#99f,stroke:#333,stroke-width:4px
+       classDef config fill:#f9f,stroke:#333
+       classDef ansible fill:#fbf,stroke:#333
+       classDef infra fill:#bfb,stroke:#333
+       
+       %% Nodes
+       Task(Task Workflow)
+       Examples(Examples)
+       Config(splunk_config.yml)
+       Inventory(Ansible Inventory)
+       Terraform(Terraform)
+       Infra(Infrastructure)
+       Ansible(Ansible Config)
+       
+       %% Main Pipeline
+       Examples --> Config --> Inventory --> Terraform --> Infra --> Ansible
+       
+       %% Task Control
+       Task --> Examples & Config & Inventory & Terraform & Ansible
+       
+       %% Apply styles
+       class Task task
+       class Examples,Config config
+       class Inventory,Ansible ansible
+       class Terraform,Infra infra
    ```
-3. Install Ansible: `brew install ansible`
-4. Install Terraform: `brew install terraform`
-5. Setup environment:
+
+   The architecture provides:
+   - Single source of truth in splunk_config.yml
+   - Clear separation between infrastructure and configuration
+   - Task-based automation for all operations
+   - Integrated validation and testing
+
+## Deployment Options
+
+This framework supports two deployment approaches:
+
+### 1. Terraform-based Deployment (Recommended)
+
+The recommended approach using Terraform for infrastructure provisioning:
+
+1. **Infrastructure Creation**: Terraform automatically provisions and manages your infrastructure
+2. **Inventory Management**: Generates `inventory/hosts` file during provisioning
+3. **Configuration**: Manages host entries based on your `splunk_config.yml`
+
+Benefits:
+- Automated infrastructure management
+- Consistent environment creation
+- Infrastructure state tracking
+- Easy scaling and updates
+
+### 2. Manual VM Deployment
+
+For scenarios where you prefer to manage VMs manually:
+
+1. **Configuration Setup**:
    ```bash
-   task setup-venv              # Create virtual environment
-   . ./.venv/bin/activate      # Activate environment
-   task setup:deps             # Install dependencies
+   # Copy and modify an example configuration
+   cp examples/idx_sh_uf_orbstack.yml config/splunk_config.yml
    ```
 
-# Usage
+2. **VM Creation**: Create virtual machines matching your configuration
+   ```bash
+   # Example using OrbStack (a lightweight virtualization solution for ARM-based macOS)
+   orb create almalinux:9 idx1
+   orb create almalinux:9 sh1
+   orb create almalinux:9 uf1
+   ```
 
-## Available Commands
+3. **Deployment**:
+   ```bash
+   task orb:inventory > inventory/hosts  # Generate inventory
+   task ansible:deploy                   # Deploy Splunk
+   ```
+
+Example `inventory/hosts`:
+```
+# Generated by orb:inventory - Host configurations
+idx1 ip_addr=198.19.249.75 public_dns_name=idx1.orb.local
+sh1 ip_addr=198.19.249.134 public_dns_name=sh1.orb.local
+uf1 ip_addr=198.19.249.177 public_dns_name=uf1.orb.local
+```
+
+## Command Reference
 
 ### Infrastructure Management
 ```bash
@@ -119,89 +162,39 @@ task deploy          # Deploy complete infrastructure and configure Splunk
 task destroy:all     # Destroy all infrastructure and clean up
 ```
 
-## Quick Start
-
-```bash
-task example:list           # View available examples
-task example:use -- idx_3shc_uf_orbstack  # Use example config
-task deploy                # Deploy infrastructure and Splunk
-```
-
-# Host Management
-
-## Using Terraform (Recommended)
-When using Terraform for infrastructure provisioning, host management is handled automatically:
-- Terraform generates the `inventory/hosts` file during infrastructure provisioning
-- Host entries are automatically managed based on your `splunk_config.yml`
-- This is handled when running `task tf:apply`
-
-## Manual Provisioning
-For scenarios where you're manually managing VMs (e.g., manually created OrbStack machines):
-
-1. Set up your configuration:
-   ```bash
-   # Copy and modify an example configuration
-   cp examples/idx_sh_uf_orbstack.yml config/splunk_config.yml
-   ```
-
-2. Create your VMs in OrbStack matching the names in your configuration:
-   ```bash
-   orb create almalinux:9 idx1
-   orb create almalinux:9 sh1
-   orb create almalinux:9 uf1
-   ```
-
-3. Generate and set the inventory:
-   ```bash
-   task orb:inventory > inventory/hosts
-   ```
-
-4. Deploy Splunk:
-   ```bash
-   task ansible:deploy
-   ```
-
-Example `inventory/hosts` format:
-```
-# Generated by orb:inventory - Host configurations
-idx1 ip_addr=198.19.249.75 public_dns_name=idx1.orb.local
-sh1 ip_addr=198.19.249.134 public_dns_name=sh1.orb.local
-uf1 ip_addr=198.19.249.177 public_dns_name=uf1.orb.local
-```
-
-# Support
+## Support
 
 **Note: This framework is not officially supported by Splunk. It is being developed on best effort basis.**
 
-# Project Status
+## Project Status
 
-## Current Sprint: Improving Manual Provisioning
+### Current Sprint: Improving Manual Provisioning
 - Simplified host management by consolidating all host information in inventory/hosts file
 - Removed redundant host mapping functionality
 - Streamlined manual provisioning process for better user experience
 
-## Previous Sprints
+### Previous Sprints
 
-### Sprint 3 (October 2024)
+#### Sprint 3 (October 2024)
 - [c] Terraform module for OrbStack Linux machines
 - [c] Development and production environment setup
 - [c] Basic Ansible inventory generation
 - [c] Host file management system
 
-### Sprint 2 (September-October 2024)
+#### Sprint 2 (September-October 2024)
 - [c] Task-based infrastructure management
 - [c] Example configurations for OrbStack
 - [c] Basic configuration validation
 - [c] Infrastructure state verification
 
-### Sprint 1 (September 2024)
+#### Sprint 1 (September 2024)
 - [c] Project initialization
 - [c] Basic project structure
 - [c] Initial documentation
 - [c] Basic OrbStack integration
 
-## Planned Features
-### Next Sprint Priority
+### Planned Features
+#### Next Sprint Priority
 - [p] AWS/vSphere provider implementation
   - AWS EC2 instance management
   - vSphere VM provisioning
@@ -225,6 +218,6 @@ Legend:
 - [p] Planned (Current/Next Sprint)
 - [d] Deferred (Future Roadmap)
 
-# License
+## License
 
 Apache License 2.0
